@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Noor’s Wallet</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#e6f0ff;
+  --card:#ffffff;
+  --primary:#3E7BFF;
+  --success:#28a745;
+  --danger:#dc3545;
+  --logout:#6c757d;
+  --text:#1C1C1E;
+  --muted:#6c757d;
+  --shadow:0 8px 25px rgba(0,0,0,0.1);
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:"Poppins",sans-serif;}
+body{background:var(--bg);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px;color:var(--text);}
+.container{width:100%;max-width:400px;}
+.card{background:var(--card);border-radius:25px;padding:30px;box-shadow:var(--shadow);margin-bottom:20px;transition:0.3s;}
+h2{font-size:26px;margin-bottom:10px;text-align:center;color:var(--primary);}
+.muted{text-align:center;color:var(--muted);font-size:14px;margin-bottom:20px;}
+input{width:100%;padding:14px;border-radius:14px;border:1px solid #ddd;background:#f8f9fa;color:var(--text);margin-bottom:15px;}
+input:focus{border-color:var(--primary);outline:none;}
+.btn{padding:14px;border-radius:12px;border:none;font-weight:600;font-size:15px;cursor:pointer;transition:0.2s;flex:1;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-success{background:var(--success);color:#fff;}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-logout{background:var(--logout);color:#fff;}
+.row{display:flex;gap:10px;margin-bottom:12px;}
+.hidden{display:none;}
+.balance{font-size:36px;font-weight:700;text-align:center;margin:18px 0;color:var(--success);}
+.user-name{text-align:center;font-size:16px;margin-bottom:5px;}
+.welcome-text{text-align:center;font-size:20px;color:var(--primary);font-weight:600;margin-bottom:15px;}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Login -->
+  <div class="card" id="authCard">
+    <h2>Noor’s Wallet</h2>
+    <p class="muted">Secure • Cloud-ready</p>
+    <input id="inputEmail" type="email" placeholder="Enter email">
+    <input id="inputPin" type="password" placeholder="4-digit PIN" maxlength="4">
+    <button id="btnLogin" class="btn btn-primary">Login</button>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="card hidden" id="dashboardCard">
+    <div class="welcome-text">Welcome</div>
+    <div class="user-name" id="txtUser"></div>
+    <div class="balance" id="txtBalance">₨0</div>
+
+    <div class="row">
+      <button id="btnDeposit" class="btn btn-success">Deposit</button>
+      <button id="btnWithdraw" class="btn btn-danger">Withdraw</button>
+      <button id="btnTransfer" class="btn btn-primary">Transfer</button>
+    </div>
+
+    <div class="row">
+      <button id="btnRefresh" class="btn btn-primary">Refresh</button>
+      <button id="btnLogout" class="btn btn-logout">Logout</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+const API_URL = "https://ssadkdm2zasyxalmplp53f7lim0urrqj.lambda-url.ap-southeast-1.on.aws/";
+let state = { email:"", pin:"", name:"", balance:0 };
+
+function qs(id){ return document.getElementById(id); }
+function show(x){ x.classList.remove("hidden"); }
+function hide(x){ x.classList.add("hidden"); }
+function safe(r){ return r.text().then(t=>{try{return JSON.parse(t);}catch{return{};}}); }
+
+async function api(action, amount=0, toEmail=""){
+  return await fetch(API_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({action,email:state.email,pin:state.pin,name:state.name,amount,toEmail})
+  }).then(safe);
+}
+
+function updateBal(b){
+  if(b!==undefined){
+    state.balance=b;
+    qs("txtBalance").textContent="₨"+b;
+  }
+}
+
+// ✅ SweetAlert Small & Center Style
+function smallPopup(title,text,icon){
+  return Swal.fire({
+    title:title,
+    text:text,
+    icon:icon,
+    width:300,
+    confirmButtonText:"OK",
+  });
+}
+
+// ✅ Login
+async function login(){
+  const email=qs("inputEmail").value.trim();
+  const pin=qs("inputPin").value.trim();
+  if(!email.includes("@") || pin.length!==4)
+    return smallPopup("Error","Invalid Login","error");
+
+  state.email=email;
+  state.pin=pin;
+  state.name=email.split("@")[0];
+  let d=await api("login");
+  updateBal(d.balance);
+  qs("txtUser").textContent=state.name;
+  hide(qs("authCard")); show(qs("dashboardCard"));
+}
+
+// ✅ After op → Auto Refresh API
+async function autoRefresh(){
+  let d=await api("login");
+  updateBal(d.balance);
+}
+
+// ✅ Deposit
+async function deposit(){
+  const {value}=await Swal.fire({title:"Amount",input:"number",width:270});
+  if(!value) return;
+  let r=await api("deposit",parseInt(value));
+  await autoRefresh();
+  smallPopup("Done ✅","Deposit Successful!","success");
+}
+
+// ✅ Withdraw
+async function withdraw(){
+  const {value}=await Swal.fire({title:"Amount",input:"number",width:270});
+  if(!value) return;
+  let r=await api("withdraw",parseInt(value));
+  await autoRefresh();
+  smallPopup("Done ✅","Withdraw Successful!","success");
+}
+
+// ✅ Transfer
+async function transfer(){
+  const {value:email}=await Swal.fire({title:"Send To Email",input:"email",width:270});
+  if(!email) return;
+  const {value:amount}=await Swal.fire({title:"Amount",input:"number",width:270});
+  if(!amount) return;
+
+  let r=await api("transfer",parseInt(amount),email);
+  await autoRefresh();
+  smallPopup("Transferred ✅","Money Sent","success");
+}
+
+// ✅ Refresh Button (but auto refresh already enabled)
+async function refresh(){ await autoRefresh(); }
+
+// ✅ Logout
+function logout(){
+  state={email:"",pin:"",name:"",balance:0};
+  hide(qs("dashboardCard")); show(qs("authCard"));
+}
+
+// Events
+qs("btnLogin").onclick=login;
+qs("btnDeposit").onclick=deposit;
+qs("btnWithdraw").onclick=withdraw;
+qs("btnTransfer").onclick=transfer;
+qs("btnRefresh").onclick=refresh;
+qs("btnLogout").onclick=logout;
+</script>
+
+</body>
+</html>
