@@ -1,0 +1,29 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+    commands:
+      - echo "Installing frontend dependencies"
+      - cd frontend && npm install || echo "No frontend dependencies"
+      - cd ../lambda && npm install
+  build:
+    commands:
+      - echo "Building frontend"
+      - cd frontend
+      - if [ -f package.json ]; then npm run build; fi
+      - cd ../lambda
+      - zip -r lambda.zip .
+artifacts:
+  files:
+    - frontend/**/*
+    - lambda/lambda.zip
+post_build:
+  commands:
+    - echo "Deploying Lambda function..."
+    - aws lambda update-function-code --function-name noors-wallet-lambda --zip-file fileb://lambda/lambda.zip --region ap-southeast-1
+    - echo "Deploying frontend to S3..."
+    - aws s3 sync frontend/ s3://noor-wallet/ --delete
+    - echo "Invalidating CloudFront cache..."
+    - aws cloudfront create-invalidation --distribution-id d327f0pkhcsqyp --paths "/*"
